@@ -1,0 +1,488 @@
+clc; close; clear;
+
+base = 2;
+
+
+% e = 3;
+% px = 11;
+% t = 2;
+
+% e = 5;
+% % px=[100101]
+% px = 37;
+% t = 4;
+
+% e = 6;
+% % px=[1000011]
+% px = 67;
+% t = 2;
+
+% e = 6;
+% % px=[1000011]
+% px = 67;
+% t = 3;
+
+% e = 6;
+% % px=[1000011]
+% px = 67;
+% t = 4;
+
+% e = 7;
+% % px=[10001001]
+% px = 137;
+% t = 5;
+
+% e = 8;
+% % px=[100011101]
+% px = 285;
+% t = 8;
+
+e = 8;
+px = 285;
+t = 16;
+
+Q = base^e;
+d = 2*t+1;
+
+global n ExpGF LogGF
+n = Q-1;
+
+
+ExpGF =  zeros(1,n); 
+ExpGF(1:2) = [1 2];
+for i = 3:n
+    ExpGF(i) = bitshift(ExpGF(i-1),1);
+    if bitget(ExpGF(i-1),e)
+        ExpGF(i) = bitxor(ExpGF(i),px);
+    end
+end
+ExpGF=uint16(ExpGF); %16<-------
+
+LogGF =  zeros(1,n,"uint16"); 
+LogGF(1:2) = [0 1];
+for i = 3:n
+    LogGF(ExpGF(i))=i-1;
+end
+gx = ConvGF([1 2], [1 4],2,2);
+for i = 3:2*t
+    gx = ConvGF([1 ExpGF(i+1)],gx,2,i);
+end
+% p = 0.01:0.01:1;
+gammadb = -20:20;
+gamma = 10.^(gammadb/10);
+
+% % q=8
+% p = [0.847415 0.843912 0.839956 0.835291 0.830053 0.824109 0.817245 0.809351 0.800245 0.789611 0.777332 0.763127 0.746609 0.727274 0.704948 0.678759 0.648439 0.61348 0.573153 0.526843 0.474867 0.417568 0.35488 0.289357 0.223402 0.161481 0.107111 0.063222 0.032593 0.014074 7*qfunc(sqrt(gamma(31:end)))];
+
+% q=64
+p = [0.978364	0.977485 0.976471 0.975306 0.973999 0.97239 0.970538 0.968381 0.965669 0.96253 0.958607 0.953939 0.948175 0.941063 0.932065 0.920876 0.906703 0.889052 0.866279 0.83707 0.799586 0.752097 0.692508 0.619482 0.532841 0.433256 0.327283 0.223751 0.13374 0.06731 0.026994 0.008106 0.001654 2.12e-4 63*qfunc(sqrt(gamma(35:end)))];
+
+% % q=256
+% p = [0.994215 0.993911 0.993564 0.993167 0.992732 0.992215 0.991535 0.990697 0.989748 0.988565 0.987078 0.985275 0.983032 0.980162 0.976416 0.971561 0.965148 0.956383 0.944712 0.928616 0.90654 0.876132 0.834641 0.779133 0.705579 0.611759 0.499486 0.373527 0.248072 0.13999 0.0636 0.021524 0.005004	7.21e-4	6.5e-05	255*qfunc(sqrt(gamma(36:end)))];
+
+Put = zeros(1,length(p));
+Pet = zeros(1,length(p));
+
+for i = 0:t
+    Put=Put+exp(sum(log(n-i+1:n))-sum(log(1:i))+i*log(p)+(n-i)*log(1-p));
+end
+
+A = -ones(1,n)*Inf;
+for l = d:n
+    for i = 0:l-d
+        tempA = sum(log(i+1:l-1))-sum(log(1:l-1-i))+(l-d-i)*log(Q);
+        if tempA>A(l)
+            A(l) = tempA+log(exp(A(l)-tempA)+(-1)^i);
+        else
+            A(l) = A(l)+log(1+exp(tempA-A(l))*(-1)^i);
+        end
+    end
+    A(l)=A(l)+log(n);
+end
+
+for h = 0:n
+    AN = -Inf;
+    for s=0:t
+        for l=d:n
+            if A(l)~=-Inf && abs(h-l)<=s
+                N = -Inf;
+                for i=0:min(s,l)
+                    if mod(s+l-h-i,2)==0 && (s+l-h-i)/2>=0 && (s+l-h-i)/2<=l-i && (s-l+h-i)/2>=0 && (s+l+h-i)/2<=n
+                        j = (s+l-h-i)/2;
+                        tempN = sum(log(l-i-j+1:n))-sum(log(1:j+h-l))-sum(log(1:n-j-h))-sum(log(1:i))-sum(log(1:j))+(j-l)*log(n)+i*log(Q-2);
+                        if N>tempN
+                            N = N+log(1+exp(tempN-N));
+                        else
+                            N = tempN+log(1+exp(N-tempN));
+                        end
+                    end
+                end
+                tempAN = N+A(l);
+                if AN>tempAN
+                    AN = AN+log(1+exp(tempAN-AN));
+                else
+                    AN = tempAN+log(1+exp(AN-tempAN));
+                end
+            end
+        end
+    end
+    Pet=Pet+exp(AN+h*log(p)+(n-h)*log(1-p));
+end
+Pot=1-Pet-Put;
+figure(1)
+subplot(1,2,1)
+
+% loglog(p,Put)
+% hold on; grid on; axis([0.01 1 10^-6 1])
+% loglog(p,Pet)
+% loglog(p,Pot)
+
+semilogy(gammadb,Put)
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pet)
+semilogy(gammadb,Pot)
+
+legend('вероятность успеха','вероятность ошибки','вероятность обнаружения')
+title('теоретические графики')
+figure(2)
+
+% plot(p,Put)
+% hold on; grid on;
+% plot(p,Pet)
+% plot(p,Pot)
+
+% loglog(p,Put)
+% hold on; grid on; axis([0.01 1 10^-6 1])
+% loglog(p,Pet)
+% loglog(p,Pot)
+
+semilogy(gammadb,Put)
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pet)
+semilogy(gammadb,Pot)
+
+Test = 1000;
+rng(1)
+Pum = zeros(1,length(p));
+Pom = zeros(1,length(p));
+Pem = zeros(1,length(p));
+tic
+for test = 1:Test
+    a = randi([0 n],1,n-2*t);
+    c = RScode(a,gx,n);
+    ef = randi([1 n],1,n);
+    ie = rand(1,n);
+    Perfl = 1;
+    PerER = zeros(1,n);
+    for i = 1:length(p)
+        e = uint16(ef.*(ie<p(i)));%16<--------
+        if sum(e ~= PerER)
+            v = bitxor(e,c);
+            PerER = e;
+            f = RSdecode(v,c,t);
+            Perfl = f;
+        end
+        switch Perfl
+            case 0
+                Pem(i)=Pem(i)+1;
+            case 1
+                Pum(i)=Pum(i)+1;
+            case 2
+                Pom(i)=Pom(i)+1;
+        end
+    end
+end
+toc
+Pom = Pom/Test;
+Pum = Pum/Test;
+Pem = Pem/Test;
+
+figure(1)
+subplot(1,2,2)
+
+semilogy(gammadb,Pum,'*')
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pem,'*')
+semilogy(gammadb,Pom,'*')
+
+% loglog(p,Pum)
+% hold on; grid on; axis([0.01 1 10^-6 1])
+% loglog(p,Pem)
+% loglog(p,Pom)
+
+% plot(p,Pum)
+% hold on; grid on;
+% plot(p,Pem)
+% plot(p,Pom)
+
+legend('вероятность успеха','вероятность ошибки','вероятность обнаружения')
+title('эксперименальные графики')
+figure(2)
+
+% loglog(p,Pum)
+% loglog(p,Pem)
+% loglog(p,Pom)
+
+semilogy(gammadb,Pum,'*')
+semilogy(gammadb,Pem,'*')
+semilogy(gammadb,Pom,'*')
+
+legend('теоретическая вероятность успеха','теоретическая вероятность ошибки','теоретическая вероятность обнаружения','эксперименальная вероятность успеха','эксперименальная вероятность ошибки','эксперименальная вероятность обнаружения')
+title('сравнение графиков')
+
+function c = RScode(a,g,n)
+    c = uint16(zeros(1,n));%16<-------
+    for i = 1:length(a)
+        if a(i)~=0
+            c(i:i+length(g)-1) = bitxor(c(i:i+length(g)-1),prodGF(g,a(i)));
+        end
+    end
+end
+
+function C = prodGF(A,B)
+    global n ExpGF LogGF
+    C = ExpGF(mod(LogGF(A)+LogGF(B),n)+1);
+end
+
+function C = inverGF(A)
+    global n ExpGF LogGF
+    C = ExpGF(mod(uint16(n)-LogGF(A),n)+1);%16<-------
+end
+
+
+
+function flag = RSdecode(v,c,t)
+    S = GornerGF(v,t);
+    if sum(S) ~= 0
+        [LAM, i] = BerMesGF(S);
+        if ~LAM
+            flag = 2;
+            return
+        end
+        
+        I = ChienGF(LAM,i);
+        if I==0
+            flag = 2;
+            return
+        end
+        Y = ForneyGF(I,LAM,S);
+        if ~Y
+            flag = 2;
+            return
+        end
+        for j = 1:i
+            v(I(j)) = bitxor(v(I(j)),Y(j));
+        end
+    end
+    if c==v
+        flag = 1;
+    else
+        flag = 0;
+    end
+end
+
+
+
+function C = ConvGF(A,B,la,lb)
+    C = zeros(1,la+lb-1,"uint16");
+    for i = 1:la
+        for j =1:lb
+            if double(A(i))*double(B(j))
+                C(i+j-1)=bitxor(C(i+j-1),prodGF(A(i),B(j)));
+            end
+        end
+    end
+end
+
+function S = GornerGF(V,t)
+    global n ExpGF
+    S = ones(1,2*t,'uint16')*V(1);
+    for i = 2:n
+        nn = 1;
+        ii = 0;
+        SS = 0;
+        EE = 0;
+        for j = 1:2*t
+            if S(j)
+                ii(nn)=j;
+                SS(nn)=S(j);
+                EE(nn)=ExpGF(j+1);
+                nn = nn+1;
+            end
+        end
+        S=ones(1,2*t,'uint16')*V(i);
+        if SS
+            SS = prodGF(SS,EE);
+            for j = 1:length(ii)
+                S(ii(j))=bitxor(S(ii(j)),SS(j));
+            end
+        end
+    end
+end
+
+
+function [L, v] = BerMesGF(S)
+    n = length(S);
+    L = 1;
+    B = 1;
+    v = 0;
+    m = 1;
+    
+    for r = 1:n
+        d = 0;
+        for j = 0:v
+            if j+1 <= length(L) && r-j >= 1 && r-j <= length(S)
+                if double(L(j+1))*double(S(r-j))
+                    d = bitxor(d, prodGF(L(j+1), S(r-j)));
+                end
+            end
+        end
+        
+        if d
+            T = L;
+            L = [L, zeros(1, m+length(B)-length(L))];
+
+            for j = 1:length(B)
+                if B(j) ~= 0
+                    idx = j + m;
+                    if idx <= length(L)
+                        L(idx) = bitxor(L(idx), prodGF(d, B(j)));
+                    else
+                        L(idx) = prodGF(d, B(j));
+                    end
+                end
+            end
+            
+            if 2*v <= r-1
+                v = r - v;
+                if v>n/2
+                    L = 0;
+                    v = 0;
+                    return
+                end
+                B = T;
+                inv_d = inverGF(d);
+
+
+%                 nn = 1;
+%                 BB = 0;
+%                 ii = 0;
+%                 for j = 1:length(B)
+%                     if B(j)
+%                         BB(nn)=B(j);
+%                         ii(nn)=j; 
+%                         nn = nn+1;
+%                     end
+%                 end
+%                 B = zeros(1,length(B),'uint8');
+%                 BB=prodGF(BB,inv_d);
+%                 for j = 1:length(ii)
+%                     B(ii(j))=BB(j);
+%                 end
+
+                for j = 1:length(B)
+                    if B(j)
+                        B(j) = prodGF(B(j), inv_d);
+                    end
+                end
+
+
+
+
+                m = 1;
+            else
+                m = m + 1;
+            end
+        else
+            m = m + 1;
+        end
+    end
+end
+
+function Y = ForneyGF(I, LAM, S)
+    global ExpGF n
+    
+    Omega = ConvGF(LAM, S, length(LAM), length(S));
+    Omega = Omega(1:length(S)); 
+    
+    Y = zeros(1, length(I), 'uint16');
+    
+    for j = 1:length(I)
+        
+        Omega_val = 0;
+        for k = 1:length(Omega)
+            if Omega(k)
+                if k == 1
+                    term = Omega(k);
+                else
+                    term = prodGF(Omega(k), ExpGF(mod((k-1)*double(I(j)), n) + 1));
+                end
+                Omega_val = bitxor(Omega_val, term);
+            end
+        end
+        
+        LAM_prime = 0;
+        for k = 2:2:length(LAM)
+            if LAM(k)
+                if k == 2
+                    term = LAM(k);
+                else
+                    term = prodGF(LAM(k), ExpGF(mod((k-2)*double(I(j)), n) + 1));
+                end
+                LAM_prime = bitxor(LAM_prime, term);
+            end
+        end
+        if ~LAM_prime
+            print('5')
+            Y = 0;
+            return
+        end
+        if double(Omega_val)*double(inverGF(LAM_prime))
+            Y(j) = prodGF(Omega_val, inverGF(LAM_prime));
+        else
+            print('6')
+            Y = 0;
+            return
+        end
+    end
+end
+
+function I = ChienGF(L,i)
+    global ExpGF n
+    A = zeros(1,n,'uint16');
+    k = 2;
+    nn = 2;
+    vi = 1;
+    for j = L(2:end)
+        if j
+            vi(nn)=k;
+            nn=nn+1;
+        end
+        k=k+1;
+    end
+    Y = ExpGF(1:i+1);
+    for j = 1:n
+        for k = vi
+            A(j)=bitxor(A(j),prodGF(Y(k),L(k)));
+            if k~=1 && j~=n
+                Y(k)=prodGF(Y(k),ExpGF(k));
+            end
+        end
+    end
+    A = A==0;
+    if sum(A)~=i
+        I=0;
+        return
+    end
+    t = 1;
+    I = zeros(1,i,'uint16');
+    for j = 1:n
+        if A(j)
+            I(t)=j;
+            t = t+1;
+            if t>i
+                break
+            end
+        end
+    end
+end
