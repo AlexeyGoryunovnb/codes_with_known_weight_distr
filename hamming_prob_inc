@@ -1,0 +1,176 @@
+clc; close; clear;
+
+base = 2;
+
+
+% e = 3;
+
+% e = 4;
+
+% e = 5;
+
+% e = 6;
+
+% e = 7;
+
+e = 8;
+
+
+n = base^e;
+d = 3;
+
+
+
+
+% p = 0.01:0.01:1;
+
+gammadb = -20:20;
+gamma = 10.^(gammadb/10);
+% q=2
+p = qfunc(sqrt(gamma));
+
+Pet = zeros(1,length(p));
+
+Put=(1-p).^n+n*p.*(1-p).^(n-1);
+
+A = -ones(1,n)*Inf;
+for l = 1:n/2
+    part1 = sum(log(2*l+1:n))-sum(log(1:n-2*l));
+    part2 = log(n-1)+sum(log(l+1:n/2))-sum(log(1:n/2-l));
+    A(2*l)= part1+log(1+(-1)^l*exp(part2-part1))-log(n);
+end
+A = real(A);
+
+for h = 3:n
+    AN = -Inf;
+    for s=0:1
+        for l=max(d,h-1):min(n,h+1)
+            if A(l)~=-Inf
+                N = -Inf;
+                if mod(s+l-h,2)==0 && (s+l-h)/2>=0 && (s+h-l)/2>=0 && (s+l-h)/2>=0 && (s+h-l)/2>=0
+                    N = sum(log((s+l-h)/2+1:l))-sum(log(1:l-(s+l-h)/2))+sum(log((s+h-l)/2+1:n-l))-sum(log(1:n-l-(s+h-l)/2));
+                end
+                tempAN = N+A(l);
+                if AN>tempAN
+                    AN = AN+log(1+exp(tempAN-AN));
+                else
+                    if AN~=-Inf || tempAN~=-Inf
+                        AN = tempAN+log(1+exp(AN-tempAN));
+                    end
+                end
+            end
+        end
+    end
+    Pet=Pet+exp(AN+h*log(p)+(n-h)*log(1-p));
+end
+Pot=1-Pet-Put;
+figure(1)
+subplot(1,2,1)
+semilogy(gammadb,Put)
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pet)
+semilogy(gammadb,Pot)
+legend('вероятность успеха','вероятность ошибки','вероятность обнаружения')
+title('теоретические графики')
+figure(2)
+semilogy(gammadb,Put)
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pet)
+semilogy(gammadb,Pot)
+
+
+Test = 100000;
+rng(1)
+Pum = zeros(1,length(p));
+Pom = zeros(1,length(p));
+Pem = zeros(1,length(p));
+tic
+for test = 1:Test
+    a = randi([0 1],1,n-e-1,'uint8');
+    c = Hemcode(a,n,e);
+    ie = rand(1,n);
+    Perfl = 1;
+    PerER = zeros(1,n);
+    for i = 1:length(p)
+        err = uint8((ie<p(i)));
+        if sum(err ~= PerER)
+            v = bitxor(err,c);
+            PerER = err;
+            f = Hemdecode(v,c);
+            Perfl = f;
+        end
+        switch Perfl
+            case 0
+                Pem(i)=Pem(i)+1;
+            case 1
+                Pum(i)=Pum(i)+1;
+            case 2
+                Pom(i)=Pom(i)+1;
+        end
+    end
+end
+toc
+Pom = Pom/Test;
+Pum = Pum/Test;
+Pem = Pem/Test;
+
+figure(1)
+subplot(1,2,2)
+semilogy(gammadb,Pum)
+hold on; grid on; axis([-20 20 10^-6 1])
+semilogy(gammadb,Pem)
+semilogy(gammadb,Pom)
+legend('вероятность успеха','вероятность ошибки','вероятность обнаружения')
+title('эксперименальные графики')
+figure(2)
+semilogy(gammadb,Pum)
+semilogy(gammadb,Pem)
+semilogy(gammadb,Pom)
+legend('теоретическая вероятность успеха','теоретическая вероятность ошибки','теоретическая вероятность обнаружения','эксперименальная вероятность успеха','эксперименальная вероятность ошибки','эксперименальная вероятность обнаружения')
+title('сравнение графиков')
+
+function C = Hemcode(A,N,Exp)
+    C=zeros(1,N,'uint8');
+    j = 1;
+    for i = 1:Exp-1
+        C(2^i+1:2^(i+1)-1)=A(j:j+2^i-2);
+        j=j+2^i-1;
+    end
+    j=0;
+    for i = 1:N-1
+        if C(i)
+            j=bitxor(j,i);
+        end
+    end
+    for i = 0:Exp-1
+        C(2^i)=bitget(j,i+1);
+    end
+    C(N)=mod(sum(C),2);
+end
+
+function flag = Hemdecode(V,C)
+    b = mod(sum(V),2);
+    j = 0;
+    for i=1:length(V)-1
+        if V(i)
+            j=bitxor(j,i);
+        end
+    end
+    if b
+        if j
+            V(j)=bitxor(V(j),1);
+        end
+    else
+        if j
+            flag=2;
+            return
+        end
+    end
+    if V==C
+        flag=1;
+        return
+    else
+        flag=0;
+        return
+    end
+end
