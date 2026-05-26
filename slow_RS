@@ -1,0 +1,274 @@
+clc; close; clear;
+
+base = 2;
+
+
+e = 3;
+px = 3;
+t = 2;
+
+Q = base^e;
+global n ExpGF LogGF
+n = Q-1;
+
+
+ExpGF =  zeros(1,n,"uint8"); 
+ExpGF(1:2) = [1 2];
+for i = 3:n
+    ExpGF(i) = bitshift(bitset(ExpGF(i-1),e,0),1);
+    if bitget(ExpGF(i-1),e)
+        ExpGF(i) = bitxor(ExpGF(i),px);
+    end
+end
+
+LogGF =  zeros(1,n,"uint8"); 
+LogGF(1:2) = [0 1];
+for i = 3:n
+    LogGF(ExpGF(i))=i-1;
+end
+% LogGF = int8([-1 0 1 3 2 6 4 5]);
+gx = ConvGF([1 2], [1 4],2,2);
+for i = 3:2*t
+    gx = ConvGF([1 ExpGF(i+1)],gx,2,i);
+end
+% gx = [1 3 1 2 3];
+p = 0.01:0.01:1;
+
+Test = 10000;
+rng(1)
+Pum = zeros(1,length(p));
+Pom = zeros(1,length(p));
+Pem = zeros(1,length(p));
+tic
+for test = 1:Test
+    a = randi([0 n],1,3);
+    c = RScode(a,gx,n);
+    ef = randi([1 n],1,n);
+    ie = rand(1,n);
+    Perfl = 1;
+    PerER = zeros(1,n);
+    for i = 1:length(p)
+        e = uint8(ef.*(ie<p(i)));
+        if sum(e ~= PerER)
+            v = bitxor(e,c);
+            PerER = e;
+            f = RSdecode(v,c,gx,n,ExpGF,t);
+            Perfl = f;
+        end
+        switch Perfl
+            case 0
+                Pem(i)=Pem(i)+1;
+            case 1
+                Pum(i)=Pum(i)+1;
+            case 2
+                Pom(i)=Pom(i)+1;
+        end
+    end
+end
+toc
+Pom = Pom/Test;
+Pum = Pum/Test;
+Pem = Pem/Test;
+
+figure(1)
+% loglog(p,Pum)
+% hold on; grid on;
+% loglog(p,Pem)
+% loglog(p,Pom)
+plot(p,Pum)
+hold on; grid on;
+plot(p,Pem)
+plot(p,Pom)
+
+function c = RScode(a,g,n)
+    c = uint8(zeros(1,n));
+    for i = 1:length(a)
+        if a(i)~=0
+            c(i:i+length(g)-1) = bitxor(c(i:i+length(g)-1),prodGF(g,a(i)));
+        end
+    end
+end
+
+function C = prodGF(A,B)
+    global n ExpGF LogGF
+    C = ExpGF(mod(LogGF(A)+LogGF(B),n)+1);
+end
+
+function C = inverGF(A)
+    global n ExpGF LogGF
+    C = ExpGF(mod(uint8(n)-LogGF(A),n)+1);
+end
+
+
+
+function flag = RSdecode(v,c,g,n,pr,t)
+    mds = [5 7 6 3 4 2 1;
+           7 3 2 5 6 4 1;
+           6 2 7 4 5 3 1;
+           3 5 4 7 2 6 1];
+    S = mulGFMV(mds,v);
+    if sum(S) ~= 0
+        M = uint8(zeros(t));
+        for i = 1:t
+            M(i,:) = S(1,i:i+t-1);
+        end
+        for i=t:-1:1
+            if DetGF(M) ~=0
+                break
+            end
+            M = M(1:end-1,1:end-1);
+        end
+        if isempty(M)
+            flag = 2;
+            return
+        end
+        M = InverMGF(M);
+        LAM = uint8(zeros(1,1+i));
+        LAM(1) = 1;
+        LAM(end:-1:2) = mulGFMV(M,S(i+1:2*i));
+        Y = [1 2 4 3 6 7 5;
+             1 4 6 5 2 3 7;
+             1 3 5 4 7 2 6;
+             1 6 2 7 4 5 3;
+             1 7 3 2 5 6 4;
+             1 5 7 6 3 4 2;
+             1 1 1 1 1 1 1];
+        LAM = mulGFMV(Y(1:end,1:1+i),LAM);
+        I = uint8(zeros(1,i));
+        LAM = (LAM==0);
+        if sum(LAM) ~= i
+            flag = 2;
+            return
+        end
+        t2 = 1;
+        for j = 1:n
+            if LAM(j)
+                I(t2) = j;
+                t2 = t2 + 1;
+            end
+        end
+        X = uint8(zeros(i));
+        for j = 1:i
+            for k = 1:i
+                X(j,k) = pr(mod((n-I(1,k))*j,n)+1);
+            end
+        end
+        X = InverMGF(X);
+        Y = mulGFMV(X,S(1:i));
+        for j = 1:i
+            if I(j) == 0
+                flag = 2;
+                return
+            end
+            v(I(j)) = bitxor(v(I(j)),Y(j));
+        end
+    end
+    if c==v
+        flag = 1;
+    else
+        if GFpolcheck(v,g)
+            flag = 0;
+        else
+            flag = 2;
+        end
+    end
+end
+
+function B = mulGFMV(M,v)
+    s = size(M);
+    B = uint8(zeros(1,s(1)));
+    for i = 1:s(1)
+        for j = 1:s(2)
+            if M(i,j)~=0 && v(j)~=0
+                B(i) = bitxor(B(i), prodGF(M(i,j),v(j)));
+            end
+        end
+    end
+end
+
+function D = DetGF(A)
+    s = length(A);
+    D = 0;
+    if s > 2
+        for i = 1:s
+            if A(1,i)~=0
+                D = bitxor(D,prodGF(A(1,i),DetGF([A(2:end,1:i-1),A(2:end,i+1:end)])));
+            end
+        end
+    elseif s == 2
+        if A(1,1)~=0 && A(2,2)~=0
+            if A(2,1)~=0 && A(1,2)~=0
+                D = bitxor(prodGF(A(1,1),A(2,2)),prodGF(A(2,1),A(1,2)));
+            else
+                D = prodGF(A(1,1),A(2,2));
+            end
+        elseif A(2,1)~=0 && A(1,2)~=0
+            D = prodGF(A(1,2),A(2,1));
+        end
+    elseif s == 1
+        D = A(1,1);
+    end
+end
+
+function In = InverMGF(A)
+    s = length(A);
+    DUB = [A,uint8(eye(s))];
+    for i = 1:s
+        if DUB(i,i) == 0
+            for j = 1:s-i
+                if DUB(i+j,i)~=0
+                    DUB(i,:) = bitxor(DUB(i,:),DUB(i+j,:));
+                end
+            end
+        end
+        for k = i:s
+            if DUB(k,i) ~= 1 && DUB(k,i) ~= 0
+                for j = 2*s:-1:i
+                    if DUB(k,j) ~= 0
+                        DUB(k,j) = prodGF(DUB(k,j),inverGF(DUB(k,i)));
+                    end
+                end
+            end
+            if k ~=i && DUB(k,i) ~= 0
+                DUB(k,:) = bitxor(DUB(k,:),DUB(i,:));
+            end
+        end
+    end
+    for i = s:-1:1
+        for k = 1:i-1
+            if DUB(k,i) ~= 1 && DUB(k,i) ~= 0
+                for j = s+1:2*s
+                    if DUB(i,j) ~= 0
+                        DUB(k,j) = bitxor(DUB(k,j),prodGF(DUB(i,j),DUB(k,i)));
+                    end
+                end
+                DUB(k,i) = 0;
+            elseif DUB(k,i) == 1
+                DUB(k,:) = bitxor(DUB(k,:),DUB(i,:));
+            end
+        end
+    end
+    In = DUB(1:end,s+1:2*s);
+end
+
+function c = GFpolcheck(a,g)
+    for i = 1:length(a)-length(g)+1
+        if a(i)~=0
+            a(i:i+length(g)-1) = bitxor(a(i:i+length(g)-1),prodGF(g,a(i)));
+        end
+    end
+    if sum(a) == 0
+        c = true;
+    else
+        c = false;
+    end
+end
+
+function C = ConvGF(A,B,la,lb)
+    C = zeros(1,la+lb-1,"uint8");
+    for i = 1:la
+        for j =1:lb
+            C(i+j-1)=bitxor(C(i+j-1),prodGF(A(i),B(j)));
+        end
+    end
+end
