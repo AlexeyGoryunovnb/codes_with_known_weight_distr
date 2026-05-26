@@ -1,0 +1,36 @@
+clc; close; clear;
+
+
+q = 256;
+gammadb = -20:20;
+gamma = 10.^(gammadb/10);
+pem = (q-1)*qfunc(sqrt(gamma));
+% pem = zeros(1,length(gamma));
+% for l = 1:q-1
+%     pem = pem+nchoosek(q-1,l)*(-1)^(l+1)*exp(-l*gamma/(1+l))/(l+1);
+% end
+
+peexp = zeros(1,length(gamma));
+tic
+Test = 1000000;
+for test = 1:Test
+    sig = randi([1 q],1);
+    N = randn(1,q);
+    for i = 1:length(gamma)
+        prs = N*sqrt(1/2/gamma(i));
+        prs(sig) = prs(sig)+1;
+        [~, I] = max(prs);
+        if I~=sig
+            peexp(i)=peexp(i)+1;
+        end
+    end
+end
+toc
+peexp = peexp/Test;
+semilogy(gammadb,pem);
+hold on; grid on;
+semilogy(gammadb,peexp);
+% hold on; grid on;
+
+axis([-20 20 10^-5 1])
+title('ошибка модуляции'); xlabel('SNR \gamma'); ylabel('P_{em}'); legend('P^+','P_{experemental}')
